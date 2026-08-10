@@ -807,6 +807,10 @@
         setTimeout(() => popup.classList.add('show'), 10);
     }
 
+    function getLocalRankings() {
+        return (JSON.parse(localStorage.getItem('tetrisMatch3Rankings')) || []).slice(0, 10);
+    }
+
     // --- 랭킹 저장 (로컬 폴백 + 클라우드 공유) ---
     async function saveRanking() {
         const currentRecord = { name: playerName, score: score, date: new Date().getTime() };
@@ -818,43 +822,48 @@
         localRankings = localRankings.slice(0, 50);
         localStorage.setItem('tetrisMatch3Rankings', JSON.stringify(localRankings));
 
-        // 2) 클라우드(Firestore) 저장 — 모두가 공유하는 전체 랭킹
+        // 2) 클라우드(Firestore) 저장 — UI를 막지 않고 백그라운드로.
+        //    저장이 끝나면 다시 새로고침해서 방금 점수가 전체 랭킹에 반영되도록.
         if (window.cloudSubmitScore) {
-            try {
-                await window.cloudSubmitScore(currentRecord.name, currentRecord.score, currentRecord.date);
-            } catch (e) {
-                console.warn('클라우드 점수 저장 실패 (로컬만 반영):', e);
-            }
+            window.cloudSubmitScore(currentRecord.name, currentRecord.score, currentRecord.date)
+                .then(() => refreshLeaderboard(currentRecord.date))
+                .catch(e => console.warn('클라우드 점수 저장 실패 (로컬만 반영):', e));
         }
 
-        // 3) 랭킹판 새로고침 (방금 기록 강조)
+        // 3) 즉시 한 번 새로고침 (현재까지의 전체 랭킹 표시)
         refreshLeaderboard(currentRecord.date);
     }
 
-    // 클라우드에서 전체 랭킹을 받아와 표시. 실패 시 로컬 기록으로 폴백.
+    // 클라우드에서 전체 랭킹을 받아와 표시.
+    //  - SDK가 아직 로드 전이면 '연결 중'(오프라인 아님)으로 로컬 표시
+    //  - 조회 실패 시에만 '오프라인'
     async function refreshLeaderboard(highlightDate = null) {
-        let rankings = null;
-        let isCloud = false;
-
-        if (window.cloudFetchTop) {
-            try {
-                rankings = await window.cloudFetchTop(10);
-                isCloud = true;
-            } catch (e) {
-                console.warn('클라우드 랭킹 로드 실패 (로컬 표시):', e);
-            }
+        if (typeof window.cloudFetchTop !== 'function') {
+            renderLeaderboard(getLocalRankings(), highlightDate, 'connecting');
+            return;
         }
-        if (!rankings) {
-            rankings = (JSON.parse(localStorage.getItem('tetrisMatch3Rankings')) || []).slice(0, 10);
+        try {
+            const rankings = await window.cloudFetchTop(10);
+            renderLeaderboard(rankings, highlightDate, 'cloud');
+        } catch (e) {
+            console.warn('클라우드 랭킹 로드 실패 (로컬 표시):', e);
+            renderLeaderboard(getLocalRankings(), highlightDate, 'offline');
         }
-        renderLeaderboard(rankings, highlightDate, isCloud);
     }
 
-    function renderLeaderboard(rankings, highlightDate = null, isCloud = false) {
+    function renderLeaderboard(rankings, highlightDate = null, mode = 'cloud') {
         const statusEl = document.getElementById('rank-status');
         if (statusEl) {
-            statusEl.innerText = isCloud ? '🌍 전체 공유 랭킹' : '📴 오프라인 (내 기록)';
-            statusEl.style.color = isCloud ? '#4cd137' : '#e9a145';
+            if (mode === 'cloud') {
+                statusEl.innerText = '🌍 전체 공유 랭킹';
+                statusEl.style.color = '#4cd137';
+            } else if (mode === 'connecting') {
+                statusEl.innerText = '⏳ 전체 랭킹 연결 중…';
+                statusEl.style.color = '#888';
+            } else {
+                statusEl.innerText = '📴 오프라인 (내 기록)';
+                statusEl.style.color = '#e9a145';
+            }
         }
 
         const rankListElement = document.getElementById('rank-list');
@@ -1265,8 +1274,11 @@
             return snap.docs.map(d => d.data());
         };
 
-        // SDK 준비 완료 → 전체 랭킹 즉시 로드
-        if (window.refreshLeaderboard) window.refreshLeaderboard();
+        // SDK 준비 완료 → 전체 랭킹 로드 (첫 연결이 느릴 수 있어 재시도)
+        const kick = () => { if (window.refreshLeaderboard) window.refreshLeaderboard(); };
+        kick();
+        setTimeout(kick, 1500);
+        setTimeout(kick, 4000);
     } catch (e) {
         console.warn('Firebase 초기화 실패 — 로컬 랭킹만 사용:', e);
     }
