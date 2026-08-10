@@ -300,7 +300,7 @@
 
     <div id="leaderboard-panel">
         <h2>🏆 명예의 전당 🏆</h2>
-        <div id="rank-status" style="text-align:center; font-size:13px; margin:-4px 0 12px 0; color:#888;">연결 중…</div>
+        <div id="rank-status" style="text-align:center; font-size:13px; margin:-4px 0 12px 0; color:#888;">🏅 내 기록 (이 기기)</div>
         <div id="rank-list"></div>
     </div>
 </div>
@@ -916,59 +916,29 @@
         return (JSON.parse(localStorage.getItem('tetrisMatch3Rankings')) || []).slice(0, 10);
     }
 
-    // --- 랭킹 저장 (로컬 폴백 + 클라우드 공유) ---
-    async function saveRanking() {
+    // --- 랭킹 저장 (로컬 전용, localStorage) ---
+    function saveRanking() {
         const currentRecord = { name: playerName, score: score, date: new Date().getTime() };
 
-        // 1) 로컬 폴백 저장 (오프라인/클라우드 장애 대비)
         let localRankings = JSON.parse(localStorage.getItem('tetrisMatch3Rankings')) || [];
         localRankings.push(currentRecord);
         localRankings.sort((a, b) => b.score - a.score || b.date - a.date);
         localRankings = localRankings.slice(0, 50);
         localStorage.setItem('tetrisMatch3Rankings', JSON.stringify(localRankings));
 
-        // 2) 클라우드(Firestore) 저장 — UI를 막지 않고 백그라운드로.
-        //    저장이 끝나면 다시 새로고침해서 방금 점수가 전체 랭킹에 반영되도록.
-        if (window.cloudSubmitScore) {
-            window.cloudSubmitScore(currentRecord.name, currentRecord.score, currentRecord.date)
-                .then(() => refreshLeaderboard(currentRecord.date))
-                .catch(e => console.warn('클라우드 점수 저장 실패 (로컬만 반영):', e));
-        }
-
-        // 3) 즉시 한 번 새로고침 (현재까지의 전체 랭킹 표시)
         refreshLeaderboard(currentRecord.date);
     }
 
-    // 클라우드에서 전체 랭킹을 받아와 표시.
-    //  - SDK가 아직 로드 전이면 '연결 중'(오프라인 아님)으로 로컬 표시
-    //  - 조회 실패 시에만 '오프라인'
-    async function refreshLeaderboard(highlightDate = null) {
-        if (typeof window.cloudFetchTop !== 'function') {
-            renderLeaderboard(getLocalRankings(), highlightDate, 'connecting');
-            return;
-        }
-        try {
-            const rankings = await window.cloudFetchTop(10);
-            renderLeaderboard(rankings, highlightDate, 'cloud');
-        } catch (e) {
-            console.warn('클라우드 랭킹 로드 실패 (로컬 표시):', e);
-            renderLeaderboard(getLocalRankings(), highlightDate, 'offline');
-        }
+    // 로컬 기록을 읽어 명예의 전당에 표시
+    function refreshLeaderboard(highlightDate = null) {
+        renderLeaderboard(getLocalRankings(), highlightDate);
     }
 
-    function renderLeaderboard(rankings, highlightDate = null, mode = 'cloud') {
+    function renderLeaderboard(rankings, highlightDate = null) {
         const statusEl = document.getElementById('rank-status');
         if (statusEl) {
-            if (mode === 'cloud') {
-                statusEl.innerText = '🌍 전체 공유 랭킹';
-                statusEl.style.color = '#4cd137';
-            } else if (mode === 'connecting') {
-                statusEl.innerText = '⏳ 전체 랭킹 연결 중…';
-                statusEl.style.color = '#888';
-            } else {
-                statusEl.innerText = '📴 오프라인 (내 기록)';
-                statusEl.style.color = '#e9a145';
-            }
+            statusEl.innerText = '🏅 내 기록 (이 기기)';
+            statusEl.style.color = '#4cd137';
         }
 
         const rankListElement = document.getElementById('rank-list');
@@ -1381,50 +1351,6 @@
         document.fonts.ready.then(() => draw());
     }
 
-</script>
-
-<!-- Firebase(Firestore) 연동: 전체 공유 명예의 전당 -->
-<script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-    import {
-        getFirestore, collection, addDoc,
-        query, orderBy, limit, getDocs
-    } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-    const firebaseConfig = {
-        apiKey: "AIzaSyDYTAcXWW11Ig8Uv9o6WyyHKr-aedNU4Es",
-        authDomain: "tetris-81e80.firebaseapp.com",
-        projectId: "tetris-81e80",
-        storageBucket: "tetris-81e80.firebasestorage.app",
-        messagingSenderId: "298416009262",
-        appId: "1:298416009262:web:7fb8966eaab7a6d2d0afbf"
-    };
-
-    try {
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
-        const scoresRef = collection(db, "scores");
-
-        // 점수 등록
-        window.cloudSubmitScore = async (name, score, date) => {
-            await addDoc(scoresRef, { name, score, date });
-        };
-
-        // 상위 N개 랭킹 조회 (점수 내림차순)
-        window.cloudFetchTop = async (n = 10) => {
-            const q = query(scoresRef, orderBy("score", "desc"), limit(n));
-            const snap = await getDocs(q);
-            return snap.docs.map(d => d.data());
-        };
-
-        // SDK 준비 완료 → 전체 랭킹 로드 (첫 연결이 느릴 수 있어 재시도)
-        const kick = () => { if (window.refreshLeaderboard) window.refreshLeaderboard(); };
-        kick();
-        setTimeout(kick, 1500);
-        setTimeout(kick, 4000);
-    } catch (e) {
-        console.warn('Firebase 초기화 실패 — 로컬 랭킹만 사용:', e);
-    }
 </script>
 </body>
 </html>
