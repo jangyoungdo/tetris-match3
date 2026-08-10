@@ -411,14 +411,23 @@
     const CANVAS_HEIGHT = ROWS * BLOCK_SIZE + OFFSET_Y + 15;
 
     // 5가지 색상으로 제한 (0은 빈칸)
+    // 파티클/점수 텍스트용 대표 색상 (블록 자체는 아래 스프라이트로 그림)
     const COLORS = [
         null,
-        '#FF3B30', // 빨
-        '#FFCC00', // 노
-        '#34C759', // 초
-        '#007AFF', // 파
-        '#AF52DE'  // 보
+        '#FF6FA5', // 토끼(핑크)
+        '#FF9F1C', // 고양이(주황)
+        '#66C61C', // 개구리(초록)
+        '#2BA7FF', // 곰(파랑)
+        '#B07A4A'  // 원숭이(갈색)
     ];
+
+    // 동물 블록 스프라이트 (색상 슬롯 1~5)
+    const BLOCK_SPRITES = [null];
+    for (let i = 1; i <= 5; i++) {
+        const img = new Image();
+        img.src = 'assets/blocks/' + i + '.png';
+        BLOCK_SPRITES[i] = img;
+    }
 
     // NxN 행렬 구조 (회전을 쉽게 하기 위함)
     const TETROMINOS = [
@@ -1077,7 +1086,13 @@
 
     // 좌표 기반 그리기 유틸 함수 추가
     function drawAbsoluteBlock(px, py, colorIndex) {
-        // 베이스 색상
+        // 동물 스프라이트가 준비됐으면 그것으로 그림
+        const sprite = BLOCK_SPRITES[colorIndex];
+        if (sprite && sprite.complete && sprite.naturalWidth > 0) {
+            ctx.drawImage(sprite, px, py, BLOCK_SIZE, BLOCK_SIZE);
+            return;
+        }
+        // 스프라이트 로딩 전 폴백: 색상 블록
         ctx.fillStyle = COLORS[colorIndex];
         ctx.fillRect(px, py, BLOCK_SIZE, BLOCK_SIZE);
 
