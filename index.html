@@ -271,11 +271,12 @@
         <div class="phase-desc">
             <h3>Phase 2: 애니팡 (자동 정렬)</h3>
             <p>테트리스 블록이 낱개로 쪼개져 빈 공간으로 쏟아져 내립니다. 같은 색상 3개가 가로/세로로 모이면 자동으로 연쇄 폭발하며 점수가 오릅니다.</p>
+            <p>🐷 한 줄에 <b>4개 이상</b> 모여 터지면 그 자리에 <b>황금 피그</b> 특수 블록이 생겨요!</p>
         </div>
 
         <div class="phase-desc">
             <h3>Phase 3: 피버 타임 (60초)</h3>
-            <p>자동 연쇄가 끝나면 <b>60초 동안</b> 블록을 조작할 수 있습니다.<br>인접한 두 블록을 <b>클릭 & 드래그</b>하여 자리를 바꾸세요!<br>※ 더 이상 맞출 수 있는 조합이 없다면 <b>자동으로 색상이 섞입니다.</b></p>
+            <p>자동 연쇄가 끝나면 <b>60초 동안</b> 블록을 조작할 수 있습니다.<br>인접한 두 블록을 <b>클릭 & 드래그</b>하여 자리를 바꾸세요!<br>🐷 <b>황금 피그</b>를 옆 블록과 바꾸면 그 색깔 블록이 <b>전부 사라집니다!</b></p>
         </div>
     </div>
 
@@ -451,6 +452,13 @@
         img.src = 'assets/blocks/' + i + '.png';
         BLOCK_SPRITES[i] = img;
     }
+
+    // 특수 블록(피그) — 4개 이상 매치 시 생성. 스왑하면 해당 색상 전체 제거.
+    const SPECIAL = 99;
+    const SPECIAL_SPRITE = new Image();
+    SPECIAL_SPRITE.src = 'assets/blocks/special.png';
+    // 매치 가능한 '색상' 칸인지 (빈칸/특수 제외)
+    function isColor(v) { return v !== 0 && v !== SPECIAL; }
 
     // NxN 행렬 구조 (회전을 쉽게 하기 위함)
     const TETROMINOS = [
@@ -672,46 +680,50 @@
         return moved;
     }
 
-    function findMatches() {
-        const toRemove = new Set();
+    // 매치 스캔: 제거 대상(removeSet)과 특수블록 생성 위치(specialSet, 4개 이상 직선의 중앙)
+    function scanMatches() {
+        const removeSet = new Set();
+        const specialSet = new Set();
 
         // 가로 검사
         for (let r = 0; r < ROWS; r++) {
-            let matchLen = 1;
-            for (let c = 1; c <= COLS; c++) {
-                if (c < COLS && board[r][c] !== 0 && board[r][c] === board[r][c-1]) {
-                    matchLen++;
-                } else {
-                    if (matchLen >= 3) {
-                        for (let i = 1; i <= matchLen; i++) {
-                            toRemove.add(`${r},${c-i}`);
-                        }
-                    }
-                    matchLen = 1;
+            let c = 0;
+            while (c < COLS) {
+                if (!isColor(board[r][c])) { c++; continue; }
+                const start = c, color = board[r][c];
+                while (c < COLS && board[r][c] === color) c++;
+                const len = c - start;
+                if (len >= 3) {
+                    for (let k = start; k < c; k++) removeSet.add(`${r},${k}`);
+                    if (len >= 4) specialSet.add(`${r},${start + Math.floor(len / 2)}`);
                 }
             }
         }
 
         // 세로 검사
-        for (let c = 0; c < COLS; c++) {
-            let matchLen = 1;
-            for (let r = 1; r <= ROWS; r++) {
-                if (r < ROWS && board[r][c] !== 0 && board[r][c] === board[r-1][c]) {
-                    matchLen++;
-                } else {
-                    if (matchLen >= 3) {
-                        for (let i = 1; i <= matchLen; i++) {
-                            toRemove.add(`${r-i},${c}`);
-                        }
-                    }
-                    matchLen = 1;
+        for (let col = 0; col < COLS; col++) {
+            let r = 0;
+            while (r < ROWS) {
+                if (!isColor(board[r][col])) { r++; continue; }
+                const start = r, color = board[r][col];
+                while (r < ROWS && board[r][col] === color) r++;
+                const len = r - start;
+                if (len >= 3) {
+                    for (let k = start; k < r; k++) removeSet.add(`${k},${col}`);
+                    if (len >= 4) specialSet.add(`${start + Math.floor(len / 2)},${col}`);
                 }
             }
         }
 
-        return Array.from(toRemove).map(str => {
+        return { removeSet, specialSet };
+    }
+
+    // 기존 인터페이스 유지 (매치 존재 여부/위치 배열이 필요한 곳에서 사용)
+    function findMatches() {
+        const { removeSet } = scanMatches();
+        return Array.from(removeSet).map(str => {
             const parts = str.split(',');
-            return {r: parseInt(parts[0]), c: parseInt(parts[1])};
+            return { r: parseInt(parts[0]), c: parseInt(parts[1]) };
         });
     }
 
@@ -722,24 +734,29 @@
         // 파티클/애니메이션을 위해 draw 호출 대신 잠시 대기
         setTimeout(() => {
             // 2. 바닥에 안착 후 매치 검사
-            const matches = findMatches();
-            if (matches.length > 0) {
+            const { removeSet, specialSet } = scanMatches();
+            if (removeSet.size > 0) {
 
                 playSound('match');
                 triggerScreenShake(200); // 콤보 시 강한 흔들림
 
-                let matchScore = matches.length * 10;
+                const matchScore = removeSet.size * 10;
                 score += matchScore;
 
-                // 점수 텍스트를 매칭된 중앙쯤에 표시
-                const centerMatch = matches[Math.floor(matches.length/2)];
-                createFloatingText(centerMatch.c, centerMatch.r, `+${matchScore}`, '#4cd137');
+                let scoreShown = false;
+                removeSet.forEach(key => {
+                    const [r, c] = key.split(',').map(Number);
+                    if (specialSet.has(key)) return; // 이 칸은 특수 블록이 됨 → 제거하지 않음
+                    createExplosion(c, r, COLORS[board[r][c]] || '#FFD700');
+                    board[r][c] = 0;
+                    if (!scoreShown) { createFloatingText(c, r, `+${matchScore}`, '#4cd137'); scoreShown = true; }
+                });
 
-                // 매치된 블록 이펙트 생성 및 제거
-                matches.forEach(pos => {
-                    const colorIndex = board[pos.r][pos.c];
-                    createExplosion(pos.c, pos.r, COLORS[colorIndex]);
-                    board[pos.r][pos.c] = 0;
+                // 4개 이상 직선 → 특수 블록(피그) 생성
+                specialSet.forEach(key => {
+                    const [r, c] = key.split(',').map(Number);
+                    board[r][c] = SPECIAL;
+                    createFloatingText(c, r, '★특수★', '#FFD700');
                 });
 
                 // 3. 제거 후 중력 적용을 위해 재귀
@@ -765,6 +782,7 @@
         let blockCount = 0;
         for (let r = 0; r < ROWS; r++) {
             for (let c = 0; c < COLS; c++) {
+                if (board[r][c] === SPECIAL) return true; // 특수 블록은 언제나 사용 가능
                 if (board[r][c] !== 0) blockCount++;
             }
         }
@@ -803,7 +821,60 @@
         }
     }
 
+    // 특수 블록(피그) 발동: 스왑된 색상의 블록을 전부 제거
+    function activateSpecial(pSpecial, pOther) {
+        currentPhase = GAME_PHASE.MATCH3_ANIMATING;
+        playSound('match');
+        triggerScreenShake(320);
+
+        const otherVal = board[pOther.r][pOther.c];
+
+        // 특수 블록 자체 제거
+        createExplosion(pSpecial.c, pSpecial.r, '#FFD700');
+        board[pSpecial.r][pSpecial.c] = 0;
+
+        if (otherVal === SPECIAL) {
+            // 특수 + 특수: 둘 다 소멸
+            createExplosion(pOther.c, pOther.r, '#FFD700');
+            board[pOther.r][pOther.c] = 0;
+        } else {
+            // 스왑된 색상 전체 제거
+            const targetColor = otherVal;
+            let removed = 0;
+            for (let r = 0; r < ROWS; r++) {
+                for (let c = 0; c < COLS; c++) {
+                    if (board[r][c] === targetColor) {
+                        createExplosion(c, r, COLORS[targetColor]);
+                        board[r][c] = 0;
+                        removed++;
+                    }
+                }
+            }
+            const gained = removed * 15; // 특수 발동 보너스
+            score += gained;
+            createFloatingText(pOther.c, pOther.r, `+${gained}`, '#FFD700');
+        }
+
+        // 이후 중력 + 연쇄
+        processAutoMatches(() => {
+            if (!hasPossibleMoves()) {
+                gameOver();
+            } else {
+                currentPhase = GAME_PHASE.MATCH3;
+            }
+        });
+    }
+
     function swapAndCheck(p1, p2) {
+        // 특수 블록이 관여하면 매치 검사 없이 즉시 발동
+        const a = board[p1.r][p1.c], b = board[p2.r][p2.c];
+        if (a === SPECIAL || b === SPECIAL) {
+            const pSpecial = (a === SPECIAL) ? p1 : p2;
+            const pOther = (a === SPECIAL) ? p2 : p1;
+            activateSpecial(pSpecial, pOther);
+            return;
+        }
+
         swapBlocks(p1.r, p1.c, p2.r, p2.c);
         playSound('swap');
 
@@ -1109,6 +1180,22 @@
 
     // 좌표 기반 그리기 유틸 함수 추가
     function drawAbsoluteBlock(px, py, colorIndex) {
+        // 특수 블록(피그): 황금 발광 + 반짝임
+        if (colorIndex === SPECIAL) {
+            if (SPECIAL_SPRITE.complete && SPECIAL_SPRITE.naturalWidth > 0) {
+                ctx.save();
+                const pulse = 8 + 5 * Math.sin(performance.now() / 200);
+                ctx.shadowColor = 'rgba(255, 215, 0, 0.95)';
+                ctx.shadowBlur = pulse;
+                ctx.drawImage(SPECIAL_SPRITE, px, py, BLOCK_SIZE, BLOCK_SIZE);
+                ctx.restore();
+                return;
+            }
+            ctx.fillStyle = '#FFD700';
+            ctx.fillRect(px, py, BLOCK_SIZE, BLOCK_SIZE);
+            return;
+        }
+
         // 동물 스프라이트가 준비됐으면 그것으로 그림
         const sprite = BLOCK_SPRITES[colorIndex];
         if (sprite && sprite.complete && sprite.naturalWidth > 0) {
