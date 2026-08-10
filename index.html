@@ -13,7 +13,9 @@
         body {
             margin: 0;
             padding: 0;
-            background: linear-gradient(135deg, #1a1a2e, #16213e, #0f3460);
+            background:
+                url('assets/background.png') center center / cover no-repeat fixed,
+                linear-gradient(135deg, #1a1a2e, #16213e, #0f3460);
             color: #fff;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             display: flex;
@@ -86,7 +88,7 @@
             box-shadow: 0 10px 30px rgba(0,0,0,0.5);
             border-radius: 8px;
             overflow: hidden;
-            background: rgba(0, 0, 0, 0.4);
+            background: transparent;
         }
         canvas {
             display: block;
@@ -962,7 +964,12 @@
             ctx.translate(dx, dy);
         }
 
-        // 상단 UI 영역 (점수, 타이머/상태)
+        // 상단 UI 영역 (점수, 타이머/상태) — 밝은 배경 위에서도 읽히도록 그림자
+        ctx.save();
+        ctx.shadowColor = 'rgba(0,0,0,0.7)';
+        ctx.shadowBlur = 5;
+        ctx.shadowOffsetY = 1;
+
         ctx.fillStyle = '#fff';
         ctx.font = 'bold 22px Segoe UI';
         ctx.textAlign = 'left';
@@ -971,32 +978,38 @@
         ctx.textAlign = 'right';
         const boardRightX = OFFSET_X + COLS * BLOCK_SIZE;
         if (currentPhase === GAME_PHASE.MATCH3 || currentPhase === GAME_PHASE.MATCH3_ANIMATING) {
-            ctx.fillStyle = timeLeft <= 10 ? '#FF3B30' : '#4cd137'; // 10초 이하면 빨간색
+            ctx.fillStyle = timeLeft <= 10 ? '#FF3B30' : '#7CFF5A'; // 10초 이하면 빨간색
             ctx.fillText(`Time: ${timeLeft}s`, boardRightX, OFFSET_Y - 20);
         } else {
-            ctx.fillStyle = '#aaa';
+            ctx.fillStyle = '#f0f0f0';
             ctx.font = 'bold 18px Segoe UI';
             let phaseText = '';
             if (currentPhase === GAME_PHASE.TETRIS) phaseText = 'Phase 1: 쌓기';
             else if (currentPhase === GAME_PHASE.AUTO_MATCH) phaseText = 'Phase 2: 정렬';
             ctx.fillText(phaseText, boardRightX, OFFSET_Y - 20);
         }
+        ctx.restore();
 
-        // 보드 배경(테두리)
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+        // 보드 배경 — 반투명 판 (뒤 배경이 비쳐 보임)
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.16)';
         ctx.fillRect(OFFSET_X, OFFSET_Y, COLS * BLOCK_SIZE, ROWS * BLOCK_SIZE);
 
-        ctx.strokeStyle = '#555';
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
         ctx.lineWidth = 2;
         ctx.strokeRect(OFFSET_X - 1, OFFSET_Y - 1, COLS * BLOCK_SIZE + 2, ROWS * BLOCK_SIZE + 2);
 
         // NEXT 블록 영역 그리기
         if (currentPhase === GAME_PHASE.TETRIS && nextPiece) {
             const nextStartX = boardRightX + 20;
-            ctx.fillStyle = '#aaa';
+            ctx.save();
+            ctx.shadowColor = 'rgba(0,0,0,0.7)';
+            ctx.shadowBlur = 5;
+            ctx.shadowOffsetY = 1;
+            ctx.fillStyle = '#ffffff';
             ctx.font = 'bold 16px Segoe UI';
             ctx.textAlign = 'left';
             ctx.fillText('NEXT', nextStartX, OFFSET_Y + 20);
+            ctx.restore();
 
             nextPiece.matrix.forEach((row, r) => {
                 row.forEach((value, c) => {
