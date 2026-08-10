@@ -125,33 +125,46 @@
             opacity: 1;
         }
         #start-popup {
-            background: rgba(20, 20, 30, 0.95);
-            border: 2px solid #4cd137;
-            padding: 40px 50px;
-            border-radius: 12px;
+            background: url('assets/start-panel.png') center center / 100% 100% no-repeat;
+            border: none;
+            border-radius: 0;
+            box-shadow: none;
+            padding: 104px 56px 52px;
+            width: 460px;
+            max-width: 92vw;
             text-align: center;
             pointer-events: auto;
-            box-shadow: 0 0 20px rgba(76, 209, 55, 0.4);
         }
         #start-popup h1 {
-            color: #4cd137;
-            margin: 0 0 15px 0;
-            font-size: 32px;
+            color: #8BE04E;
+            margin: 0 0 10px 0;
+            font-size: 34px;
+            text-shadow: 0 2px 6px rgba(0,0,0,0.6);
+        }
+        #start-popup p {
+            color: #cfe9c0;
+            font-size: 16px;
+            margin: 0 0 18px 0;
         }
         #player-name {
-            padding: 10px;
+            padding: 12px 14px;
             font-size: 16px;
-            border-radius: 4px;
-            border: 1px solid #ccc;
-            margin-bottom: 20px;
-            width: 80%;
+            border-radius: 16px;
+            border: 2px solid rgba(139, 224, 78, 0.5);
+            margin-bottom: 18px;
+            width: 85%;
             text-align: center;
-            background: #2a2a3e;
+            background: rgba(255, 255, 255, 0.12);
             color: white;
             outline: none;
+            transition: border-color 0.2s, background 0.2s;
+        }
+        #player-name::placeholder {
+            color: rgba(255, 255, 255, 0.55);
         }
         #player-name:focus {
-            border-color: #4cd137;
+            border-color: #8BE04E;
+            background: rgba(255, 255, 255, 0.18);
         }
         #leaderboard-panel {
             background: rgba(0, 0, 0, 0.4);
@@ -188,15 +201,19 @@
             background: #4cd137;
             color: white;
             border: none;
-            padding: 12px 24px;
-            font-size: 18px;
+            padding: 13px 34px;
+            font-size: 19px;
             font-weight: bold;
-            border-radius: 6px;
+            border-radius: 22px;
             cursor: pointer;
-            transition: background 0.2s, transform 0.1s;
+            box-shadow: 0 4px 0 #2fa021, 0 6px 12px rgba(0,0,0,0.35);
+            transition: background 0.2s, transform 0.1s, box-shadow 0.1s;
         }
         #start-btn:hover { background: #5ddc48; }
-        #start-btn:active { transform: scale(0.95); }
+        #start-btn:active {
+            transform: translateY(3px);
+            box-shadow: 0 1px 0 #2fa021, 0 2px 6px rgba(0,0,0,0.35);
+        }
         .hidden {
             display: none !important;
         }
@@ -267,8 +284,8 @@
         <div id="ui-layer">
             <div id="start-popup">
                 <h1>퍼즐 게임</h1>
-                <p>준비가 완료되었습니다!</p>
-                <input type="text" id="player-name" placeholder="당신의 닉네임을 입력하세요" maxlength="10">
+                <p>닉네임을 정하고 시작해요! 🐸</p>
+                <input type="text" id="player-name" placeholder="닉네임을 입력하세요" maxlength="10">
                 <br>
                 <button id="start-btn">게임 시작</button>
             </div>
