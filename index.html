@@ -292,6 +292,7 @@
             </div>
             <div id="game-over-popup" class="hidden">
                 <h1>GAME OVER</h1>
+                <p id="over-reason" style="display:none; font-size:17px; color:#ffcc00; margin:0 0 12px 0;"></p>
                 <p>최종 획득 점수: <span id="final-score">0</span></p>
                 <button id="restart-btn" style="margin-top: 15px;">처음으로 (다른 플레이어)</button>
             </div>
@@ -501,6 +502,10 @@
     let timerCounter = 0;
     let reqId = null;
 
+    // 데드락(더 이상 움직일 수 없음) 감지/안내
+    let deadlockCheckCounter = 0;
+    let noMoveBannerUntil = 0;
+
     // 조작 변수
     let dragStart = null;
 
@@ -515,6 +520,8 @@
         nextPiece = createPiece(); // 다음 블록 미리 생성
         dropCounter = 0;
         timerCounter = 0;
+        deadlockCheckCounter = 0;
+        noMoveBannerUntil = 0;
         dragStart = null;
         particles = [];
         floatingTexts = [];
@@ -815,7 +822,7 @@
         timeLeft = 60;
         timerCounter = 0;
         if (!hasPossibleMoves()) {
-            gameOver(); // 시작하자마자 할 게 없으면 즉시 종료
+            endByDeadlock(); // 시작하자마자 할 게 없으면 안내 후 종료
         } else {
             currentPhase = GAME_PHASE.MATCH3;
         }
@@ -858,7 +865,7 @@
         // 이후 중력 + 연쇄
         processAutoMatches(() => {
             if (!hasPossibleMoves()) {
-                gameOver();
+                endByDeadlock();
             } else {
                 currentPhase = GAME_PHASE.MATCH3;
             }
@@ -884,7 +891,7 @@
             currentPhase = GAME_PHASE.MATCH3_ANIMATING;
             processAutoMatches(() => {
                 if (!hasPossibleMoves()) {
-                    gameOver(); // 연쇄 후 할 게 없으면 즉시 종료
+                    endByDeadlock(); // 연쇄 후 할 게 없으면 안내 후 종료
                 } else {
                     currentPhase = GAME_PHASE.MATCH3; // 다시 플레이어 조작 허용
                 }
@@ -898,10 +905,25 @@
         }
     }
 
+    // 더 이상 움직일 수 없음 → 안내 배너 후 종료
+    function endByDeadlock() {
+        if (currentPhase === GAME_PHASE.GAME_OVER) return;
+        currentPhase = GAME_PHASE.MATCH3_ANIMATING; // 입력 차단
+        playSound('error');
+        noMoveBannerUntil = performance.now() + 1300;
+        setTimeout(() => gameOver('더 이상 움직일 수 없어요! 🐸'), 1300);
+    }
+
     // --- 페이즈 4: 게임 오버 ---
-    function gameOver() {
+    function gameOver(reason) {
         currentPhase = GAME_PHASE.GAME_OVER;
         document.getElementById('final-score').innerText = score;
+
+        const reasonEl = document.getElementById('over-reason');
+        if (reasonEl) {
+            reasonEl.innerText = reason || '';
+            reasonEl.style.display = reason ? 'block' : 'none';
+        }
 
         playSound('gameover');
         saveRanking(); // 랭킹 저장 및 UI 표시
@@ -987,7 +1009,15 @@
                 timeLeft--;
                 timerCounter -= 1000;
                 if (timeLeft <= 0) {
-                    gameOver();
+                    gameOver('시간 종료! ⏰');
+                }
+            }
+            // 플레이어 조작 대기 중 더 이상 가능한 수가 없으면 종료 (상시 감지)
+            if (currentPhase === GAME_PHASE.MATCH3) {
+                deadlockCheckCounter += deltaTime;
+                if (deadlockCheckCounter >= 700) {
+                    deadlockCheckCounter = 0;
+                    if (!hasPossibleMoves()) endByDeadlock();
                 }
             }
         }
@@ -1146,6 +1176,26 @@
 
         // 화면 흔들림 복구
         ctx.restore();
+
+        // "더 이상 움직일 수 없어요!" 안내 배너 (흔들림 영향 X)
+        if (performance.now() < noMoveBannerUntil) {
+            const bx = OFFSET_X, bw = COLS * BLOCK_SIZE;
+            const by = OFFSET_Y + ROWS * BLOCK_SIZE / 2 - 40;
+            ctx.save();
+            ctx.fillStyle = 'rgba(20, 24, 34, 0.82)';
+            ctx.fillRect(bx, by, bw, 80);
+            ctx.strokeStyle = '#e94560';
+            ctx.lineWidth = 3;
+            ctx.strokeRect(bx, by, bw, 80);
+            ctx.fillStyle = '#fff';
+            ctx.textAlign = 'center';
+            ctx.font = 'bold 22px Jua';
+            ctx.fillText('더 이상 움직일 수 없어요!', bx + bw / 2, by + 40);
+            ctx.fillStyle = '#8BE04E';
+            ctx.font = 'bold 16px Jua';
+            ctx.fillText('게임을 종료합니다 🐸', bx + bw / 2, by + 66);
+            ctx.restore();
+        }
     }
 
     // 좌표 기반 그리기 유틸 함수 추가
